@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+{% block title %}Admin — DeupGaming{% endblock %}
+{% block head %}
+<style>
+.admin-layout { display:grid; grid-template-columns:210px 1fr; gap:1.25rem; }
+.admin-nav { display:flex; flex-direction:column; gap:.2rem; }
+.admin-nav a { display:flex;align-items:center;gap:.5rem;padding:.46rem .7rem;border-radius:var(--r);font-size:.78rem;color:var(--text-2);border:1px solid transparent;transition:all .18s;text-decoration:none; }
+.admin-nav a:hover { background:var(--bg-2); color:var(--text); border-color:var(--border); }
+.admin-nav a.active { background:var(--bg-2); border-color:var(--border-hi); color:var(--text); }
+.admin-section { display:none; animation:secIn .22s ease; }
+.admin-section.active { display:block; }
+@keyframes secIn { from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none} }
+.stat-row { display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;margin-bottom:1.25rem; }
+.mini-stat { background:var(--bg-1);border:1px solid var(--border);border-radius:var(--r-xl);padding:.85rem 1rem;transition:all .18s; }
+.mini-stat:hover { border-color:var(--border-hi);transform:translateY(-1px); }
+.mini-stat-val { font-family:var(--mono);font-size:1.45rem;font-weight:600;color:var(--text); }
+.mini-stat-lbl { font-size:.62rem;color:var(--text-3);font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;margin-top:.25rem; }
+.section-card { background:var(--bg-1);border:1px solid var(--border);border-radius:var(--r-xl);padding:1.25rem; }
+@media(max-width:900px){ .admin-layout{grid-template-columns:1fr;} .admin-nav{flex-direction:row;flex-wrap:wrap;} .stat-row{grid-template-columns:1fr 1fr;} }
+</style>
+{% endblock %}
+{% block body %}
+<div class="page">
+<div class="admin-layout">
+
+<nav style="padding-top:.2rem;">
+  <div style="font-size:.58rem;font-weight:700;font-family:var(--mono);color:var(--text-3);text-transform:uppercase;letter-spacing:.12em;padding:.3rem .7rem;margin-bottom:.35rem;">Panel</div>
+  <div class="admin-nav">
+    <a href="#" onclick="showSec('overview')" id="nav-overview" class="active">&#9642; Overview</a>
+    <a href="#" onclick="showSec('vpses')"    id="nav-vpses">&#9632; VPSes</a>
+    <a href="#" onclick="showSec('users')"    id="nav-users">&#9675; Users</a>
+    <a href="#" onclick="showSec('nat')"      id="nav-nat">&#9670; NAT / Ports</a>
+    <a href="#" onclick="showSec('grant')"    id="nav-grant">&#9650; Grant VPS</a>
+    <a href="#" onclick="showSec('config')"   id="nav-config">&#9881; Config</a>
+    <a href="#" onclick="showSec('broadcast')" id="nav-broadcast">&#9671; Broadcast</a>
+    <a href="{{ url_for('admin_nodes') }}" style="color:var(--blue);margin-top:.4rem;">&#9671; Nodes &#8599;</a>
+  </div>
+  <div style="margin-top:1.1rem;padding:.7rem;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--r-lg);">
+    <div style="font-size:.58rem;color:var(--text-3);font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.35rem;">Node</div>
+    <div style="font-family:var(--mono);font-size:.75rem;color:var(--accent);word-break:break-all;">{{ node_code }}</div>
+    <div style="font-size:.62rem;color:var(--text-3);margin-top:.2rem;">{{ node_url or 'detecting...' }}</div>
+    <div style="font-size:.62rem;color:var(--text-2);margin-top:.3rem;font-family:var(--mono);">IP: {{ public_ip }}</div>
+  </div>
+</nav>
+
+<main>
+
+<!-- Overview -->
+<div class="admin-section active" id="sec-overview">
+  <div class="flex-b" style="margin-bottom:1.1rem;">
+    <span style="font-size:1.05rem;font-weight:600;color:var(--text);">Overview</span>
+  </div>
+  <div class="stat-row">
+    <div class="mini-stat"><div class="mini-stat-val">{{ vpses|length }}</div><div class="mini-stat-lbl">VPSes</div></div>
+    <div class="mini-stat"><div class="mini-stat-val" style="color:var(--accent);">{{ vpses|selectattr('status','equalto','running')|list|length }}</div><div class="mini-stat-lbl">Running</div></div>
+    <div class="mini-stat"><div class="mini-stat-val" style="color:var(--blue);">{{ users|length }}</div><div class="mini-stat-lbl">Users</div></div>
+    <div class="mini-stat"><div class="mini-stat-val" style="color:var(--warn);">{{ queue_length }}</div><div class="mini-stat-lbl">In queue</div></div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:.85rem;">
+    <div class="section-card">
+      <div style="font-size:.6rem;font-weight:600;font-family:var(--mono);color:var(--text-3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.85rem;">Host</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.65rem;">
+        <div><div style="font-family:var(--mono);font-size:1.1rem;font-weight:600;color:var(--text);">{{ host.cpu_cores }}</div><div style="font-size:.64rem;color:var(--text-3);">CPU cores</div></div>
+        <div><div style="font-family:var(--mono);font-size:1.1rem;font-weight:600;color:var(--text);">{{ (host.ram_mb/1024)|int }}GB</div><div style="font-size:.64rem;color:var(--text-3);">RAM</div></div>
+        <div><div style="font-family:var(--mono);font-size:1.1rem;font-weight:600;color:var(--text);">{{ host.disk_allocated_gb }}GB</div><div style="font-size:.64rem;color:var(--text-3);">Allocated</div></div>
+        <div><div style="font-family:var(--mono);font-size:1.1rem;font-weight:600;color:var(--text);">{{ max_vps }}</div><div style="font-size:.64rem;color:var(--text-3);">Max VPS</div></div>
+      </div>
+    </div>
+    <div class="section-card">
+      <div style="font-size:.6rem;font-weight:600;font-family:var(--mono);color:var(--text-3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.85rem;">Shared IP config</div>
+      <div style="font-family:var(--mono);font-size:.82rem;color:var(--accent);margin-bottom:.4rem;">{{ public_ip }}</div>
+      <div style="font-size:.72rem;color:var(--text-2);">SSH ports: <span style="font-family:var(--mono);">10000–10999</span></div>
+      <div style="font-size:.72rem;color:var(--text-2);">Extra ports: <span style="font-family:var(--mono);">11000–19999</span></div>
+      <div style="font-size:.72rem;color:var(--text-2);">Per VPS: <span style="font-family:var(--mono);">1 SSH + 5 extra</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- VPSes -->
+<div class="admin-section" id="sec-vpses">
+  <div class="flex-b" style="margin-bottom:1rem;"><span style="font-size:1.05rem;font-weight:600;color:var(--text);">All VPSes</span><span style="font-size:.72rem;color:var(--text-3);">{{ vpses|length }} total</span></div>
+  <div style="background:var(--bg-1);border:1px solid var(--border);border-radius:var(--r-xl);overflow:hidden;">
+    <div style="overflow-x:auto;">
+      <table>
+        <thead><tr><th>User</th><th>Container</th><th>SSH port</th><th>Status</th><th>KVM</th><th>Actions</th></tr></thead>
+        <tbody>
+          {% for v in vpses %}
+          {% set nat = nat_rules | selectattr('vps_id','equalto',v.id) | first | default(none) %}
+          <tr>
+            <td class="mono" style="color:var(--text);">{{ v.username }}</td>
+            <td class="mono" style="font-size:.7rem;">{{ v.container_id[:20] }}</td>
+            <td class="mono" style="color:var(--accent);">{{ nat.ssh_port if nat else '—' }}</td>
+            <td><span class="badge {{ 'badge-green' if v.status=='running' else 'badge-red' if v.status in ('failed','suspended') else 'badge-yellow' if v.status in ('creating','queued') else 'badge-grey' }}">{{ v.status }}</span></td>
+            <td>{% if v.kvm_enabled %}<span class="badge badge-purple">KVM</span>{% else %}<span style="color:var(--text-3);font-size:.7rem;">—</span>{% endif %}</td>
+            <td>
+              <div style="display:flex;gap:.3rem;flex-wrap:wrap;">
+                {% if v.status == 'running' %}
+                <form method="post" action="{{ url_for('admin_vps_action', vps_id=v.id, action='suspend') }}">
+                  <button class="btn btn-warn btn-sm">Suspend</button>
+                </form>
+                {% elif v.status == 'suspended' %}
+                <form method="post" action="{{ url_for('admin_vps_action', vps_id=v.id, action='unsuspend') }}">
+                  <button class="btn btn-primary btn-sm">Unsuspend</button>
+                </form>
+                {% endif %}
+                {% if host_kvm %}
+                {% if v.kvm_enabled %}
+                <form method="post" action="{{ url_for('admin_vps_action', vps_id=v.id, action='disable_kvm') }}">
+                  <button class="btn btn-ghost btn-sm">KVM off</button>
+                </form>
+                {% else %}
+                <form method="post" action="{{ url_for('admin_vps_action', vps_id=v.id, action='enable_kvm') }}">
+                  <button class="btn btn-ghost btn-sm">KVM on</button>
+                </form>
+                {% endif %}
+                {% endif %}
+                <form method="post" action="{{ url_for('admin_vps_action', vps_id=v.id, action='delete') }}"
+                      onsubmit="return confirm('Delete {{ v.container_id }}?')">
+                  <button class="btn btn-danger btn-sm">Delete</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Users -->
+<div class="admin-section" id="sec-users">
+  <div class="flex-b" style="margin-bottom:1rem;"><span style="font-size:1.05rem;font-weight:600;color:var(--text);">Users</span><span style="font-size:.72rem;color:var(--text-3);">{{ users|length }} registered</span></div>
+  <div style="background:var(--bg-1);border:1px solid var(--border);border-radius:var(--r-xl);overflow:hidden;">
+    <table>
+      <thead><tr><th>ID</th><th>Username</th><th>Signup IP</th><th>Role</th><th>VPN</th><th>Joined</th></tr></thead>
+      <tbody>
+        {% for u in users %}
+        <tr>
+          <td class="mono" style="color:var(--text-3);">{{ u.id }}</td>
+          <td class="mono" style="color:var(--text);">{{ u.username }}</td>
+          <td class="mono" style="font-size:.72rem;">{{ u.signup_ip }}</td>
+          <td>{% if u.is_admin %}<span class="badge badge-purple">admin</span>{% else %}<span class="badge badge-grey">user</span>{% endif %}</td>
+          <td>{% if u.is_vpn_signup %}<span class="badge badge-yellow" title="{{ u.vpn_provider }}">VPN</span>{% else %}—{% endif %}</td>
+          <td class="mono" style="font-size:.68rem;color:var(--text-3);">{{ u.created_at | strftime }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- NAT / Ports -->
+<div class="admin-section" id="sec-nat">
+  <div class="flex-b" style="margin-bottom:1rem;"><span style="font-size:1.05rem;font-weight:600;color:var(--text);">NAT Rules</span><span style="font-size:.72rem;color:var(--text-3);">{{ nat_rules|length }} active</span></div>
+  <div style="background:var(--bg-1);border:1px solid var(--border);border-radius:var(--r-xl);overflow:hidden;">
+    <table>
+      <thead><tr><th>VPS ID</th><th>Container</th><th>Container IP</th><th>SSH port</th><th>Extra ports</th></tr></thead>
+      <tbody>
+        {% for r in nat_rules %}
+        <tr>
+          <td class="mono" style="color:var(--text-3);">{{ r.vps_id }}</td>
+          <td class="mono" style="font-size:.72rem;">{{ r.container_id[:20] }}</td>
+          <td class="mono" style="color:var(--blue);">{{ r.container_ip }}</td>
+          <td class="mono" style="color:var(--accent);font-weight:600;">{{ r.ssh_port }}</td>
+          <td class="mono" style="font-size:.72rem;color:var(--text-2);">{{ r.extra_ports }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" style="text-align:center;color:var(--text-3);padding:1.5rem;">No NAT rules yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div style="margin-top:.75rem;padding:.75rem;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--r-lg);font-size:.74rem;color:var(--text-2);">
+    Rules are applied automatically when VPSes are created and restored on panel restart.
+    To manually reapply all rules: <code>python3 -c "import sqlite3,nat; db=sqlite3.connect('panel.db'); db.row_factory=sqlite3.Row; nat.reapply_all_rules(db)"</code>
+  </div>
+</div>
+
+<!-- Grant VPS -->
+<div class="admin-section" id="sec-grant">
+  <div style="margin-bottom:1rem;"><span style="font-size:1.05rem;font-weight:600;color:var(--text);">Grant VPS</span></div>
+  <div class="section-card" style="max-width:520px;">
+    <form method="post" action="{{ url_for('admin_grant_vps') }}">
+      <div class="form-group">
+        <label class="form-label">Username</label>
+        <input name="username" class="form-input" placeholder="target username">
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.85rem;">
+        <div class="form-group" style="margin:0;">
+          <label class="form-label">CPU cores</label>
+          <input name="cpu_cores" type="number" class="form-input" min="1" max="32" value="{{ config.get('vps_cpu_cores',4) }}">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label class="form-label">RAM (GB)</label>
+          <input name="ram_gb" type="number" class="form-input" min="1" max="160" value="{{ config.get('vps_ram_gb',4) }}">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label class="form-label">Disk (GB)</label>
+          <input name="disk_gb" type="number" class="form-input" min="5" max="2000" value="{{ config.get('vps_disk_gb',80) }}">
+        </div>
+      </div>
+      {% if host_kvm %}
+      <div class="form-group" style="margin-top:.75rem;">
+        <label style="display:flex;align-items:center;gap:.6rem;cursor:pointer;font-size:.82rem;color:var(--text-2);">
+          <input type="checkbox" name="kvm_enabled" value="1" style="accent-color:var(--accent);">
+          Enable KVM <span class="badge badge-green" style="font-size:.6rem;">host supports</span>
+        </label>
+      </div>
+      {% endif %}
+      <button type="submit" class="btn btn-primary" style="margin-top:.5rem;">Provision VPS</button>
+    </form>
+  </div>
+</div>
+
+<!-- Config -->
+<div class="admin-section" id="sec-config">
+  <div style="margin-bottom:1rem;"><span style="font-size:1.05rem;font-weight:600;color:var(--text);">Free tier limits</span></div>
+  <div class="section-card" style="max-width:400px;">
+    <form method="post" action="{{ url_for('admin_update_config') }}">
+      <div class="form-group">
+        <label class="form-label">CPU cores per VPS</label>
+        <input name="vps_cpu_cores" type="number" class="form-input" min="1" max="32" value="{{ config.get('vps_cpu_cores',4) }}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">RAM per VPS (GB)</label>
+        <input name="vps_ram_gb" type="number" class="form-input" min="1" max="256" value="{{ config.get('vps_ram_gb',4) }}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Disk per VPS (GB)</label>
+        <input name="vps_disk_gb" type="number" class="form-input" min="5" max="2000" value="{{ config.get('vps_disk_gb',80) }}">
+      </div>
+      <button type="submit" class="btn btn-primary">Save limits</button>
+    </form>
+  </div>
+</div>
+
+<!-- Broadcast -->
+<div class="admin-section" id="sec-broadcast">
+  <div style="margin-bottom:1rem;"><span style="font-size:1.05rem;font-weight:600;color:var(--text);">Broadcast</span></div>
+  <div class="section-card" style="max-width:500px;">
+    {% if broadcast and broadcast.active %}
+    <div class="alert alert-warn" style="margin-bottom:1rem;">Active: "{{ broadcast.message }}"</div>
+    <form method="post" action="{{ url_for('admin_broadcast_clear') }}" style="margin-bottom:1.25rem;">
+      <button class="btn btn-ghost btn-sm">Clear</button>
+    </form>
+    <hr class="divider">
+    {% endif %}
+    <form method="post" action="{{ url_for('admin_broadcast_set') }}">
+      <div class="form-group">
+        <label class="form-label">Message</label>
+        <input name="message" class="form-input" placeholder="Scheduled maintenance at 03:00 UTC…" maxlength="500">
+      </div>
+      <button type="submit" class="btn btn-primary">Post</button>
+    </form>
+  </div>
+</div>
+
+</main>
+</div>
+</div>
+<script>
+function showSec(name){
+  document.querySelectorAll('.admin-section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.admin-nav a').forEach(a=>a.classList.remove('active'));
+  const s=document.getElementById('sec-'+name), n=document.getElementById('nav-'+name);
+  if(s) s.classList.add('active'); if(n) n.classList.add('active');
+  event.preventDefault();
+}
+</script>
+{% endblock %}

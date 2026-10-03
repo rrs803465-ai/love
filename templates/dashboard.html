@@ -1,0 +1,454 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — DeupGaming{% endblock %}
+{% block head %}
+<style>
+.dash { display:grid; grid-template-columns:248px 1fr; gap:1.1rem; }
+.sidebar { display:flex; flex-direction:column; gap:.65rem; }
+.vps-item {
+  display:flex; align-items:center; gap:.55rem;
+  padding:.42rem .6rem; border-radius:var(--r);
+  border:1px solid transparent; font-size:.76rem;
+  color:var(--text-2); transition:all .12s; cursor:pointer; text-decoration:none;
+}
+.vps-item:hover { background:var(--bg-2); color:var(--text); border-color:var(--border); }
+.vps-item.active { background:var(--bg-2); border-color:var(--border-hi); color:var(--text); }
+.vps-item-name { flex:1; font-family:var(--mono); font-size:.72rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vps-item-st { font-size:.62rem; color:var(--text-3); white-space:nowrap; }
+.main { display:flex; flex-direction:column; gap:.9rem; min-width:0; }
+.stats-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:.7rem; }
+.tabs { display:flex; border-bottom:1px solid var(--border); }
+.tab { display:flex; align-items:center; gap:.3rem; padding:.42rem .8rem; font-size:.74rem; color:var(--text-3); cursor:pointer; border-bottom:2px solid transparent; transition:all .12s; user-select:none; }
+.tab:hover { color:var(--text-2); }
+.tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+.info-grid { display:grid; grid-template-columns:1fr 1fr; gap:.6rem; }
+.info-item { display:flex; flex-direction:column; gap:.12rem; }
+.info-label { font-size:.61rem; font-family:var(--mono); color:var(--text-3); text-transform:uppercase; letter-spacing:.08em; }
+.info-val { font-size:.78rem; font-family:var(--mono); color:var(--text); word-break:break-all; }
+.action-row { display:flex; gap:.38rem; flex-wrap:wrap; }
+
+/* SSH info box */
+.ssh-box {
+  background:var(--bg-2); border:1px solid var(--border);
+  border-radius:var(--r-lg); padding:1rem 1.1rem;
+}
+.ssh-box-title {
+  font-size:.6rem; font-family:var(--mono); color:var(--text-3);
+  text-transform:uppercase; letter-spacing:.1em; margin-bottom:.65rem;
+  display:flex; align-items:center; gap:.4rem;
+}
+.ssh-cmd {
+  font-family:var(--mono); font-size:.82rem; color:var(--accent-hi);
+  background:var(--bg); border:1px solid var(--border);
+  border-radius:var(--r); padding:.55rem .75rem;
+  word-break:break-all; margin-bottom:.65rem;
+  position:relative;
+}
+.port-grid {
+  display:grid; grid-template-columns:repeat(auto-fill,minmax(80px,1fr)); gap:.4rem;
+}
+.port-pill {
+  background:var(--bg); border:1px solid var(--border);
+  border-radius:var(--r); padding:.3rem .5rem;
+  font-family:var(--mono); font-size:.72rem;
+  text-align:center; color:var(--text-2);
+  transition:all .12s;
+}
+.port-pill:hover { border-color:var(--accent); color:var(--accent); }
+
+/* queue */
+.queue-card { background:var(--bg-1); border:1px solid rgba(64,136,240,.22); border-radius:var(--r-xl); padding:1.5rem; text-align:center; }
+.queue-ring { width:44px; height:44px; border-radius:50%; border:2px solid var(--border); border-top-color:var(--blue); animation:spin .9s linear infinite; margin:0 auto .9rem; }
+@keyframes spin { to{transform:rotate(360deg)} }
+
+/* stars */
+.star-btn { background:none; border:none; cursor:pointer; font-size:1.1rem; color:var(--text-3); transition:color .1s,transform .1s; padding:0 .05rem; line-height:1; }
+.star-btn:hover { transform:scale(1.15); color:var(--warn); }
+.star-btn.lit { color:var(--warn); }
+.review-item { padding:.46rem 0; border-bottom:1px solid var(--border); }
+.review-item:last-child { border-bottom:none; }
+.review-text { font-size:.72rem; color:var(--text-2); margin-top:.12rem; }
+.review-user { font-size:.63rem; color:var(--text-3); font-family:var(--mono); }
+
+@media(max-width:900px){ .dash{grid-template-columns:1fr;} .stats-grid{grid-template-columns:1fr 1fr;} }
+@media(max-width:480px){ .stats-grid{grid-template-columns:1fr;} .info-grid{grid-template-columns:1fr;} }
+</style>
+{% endblock %}
+{% block body %}
+<div class="page">
+<div class="dash">
+
+<!-- Sidebar -->
+<aside class="sidebar">
+  <div class="card card-sm">
+    <div style="display:flex;align-items:center;gap:.55rem;margin-bottom:.65rem;">
+      <div style="width:28px;height:28px;border-radius:50%;background:var(--bg-3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:.76rem;color:var(--text-2);font-weight:600;">
+        {{ current_user.username[0].upper() }}
+      </div>
+      <div>
+        <div style="font-size:.8rem;font-weight:500;color:var(--text);">{{ current_user.username }}</div>
+        {% if current_user.youtube_verified %}<span class="badge badge-purple">verified</span>{% endif %}
+      </div>
+    </div>
+    <a href="{{ url_for('delete_account') }}" style="font-size:.68rem;color:var(--text-3);">Delete account</a>
+  </div>
+
+  <div class="card card-sm">
+    <div class="card-title">Servers</div>
+    {% if all_vps %}
+    <div style="display:flex;flex-direction:column;gap:.18rem;">
+      {% for v in all_vps %}
+      <a href="{{ url_for('dashboard', vps_id=v.id) }}"
+         class="vps-item {{ 'active' if vps and vps.id == v.id }}">
+        <span class="dot {{ 'dot-green' if v.status=='running' else 'dot-yellow' if v.status in ('creating','queued') else 'dot-red' if v.status in ('failed','suspended') else 'dot-grey' }}"></span>
+        <span class="vps-item-name">{{ v.container_id[:16] if v.container_id not in ('pending','pending-overflow') else 'provisioning...' }}</span>
+        <span class="vps-item-st">{{ v.status }}</span>
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if not all_vps %}
+    <form method="post" action="{{ url_for('vps_create') }}" style="margin-top:.3rem;">
+      <button class="btn btn-primary btn-full btn-sm">+ Create VPS</button>
+    </form>
+    {% endif %}
+  </div>
+
+  {% if limits %}
+  <div class="card card-sm">
+    <div class="card-title">Free tier</div>
+    <div style="display:flex;flex-direction:column;gap:.35rem;">
+      <div class="flex-b" style="font-size:.72rem;font-family:var(--mono);">
+        <span style="color:var(--text-3);">CPU</span><span style="color:var(--text-2);">{{ limits.cpu }} vCPU</span>
+      </div>
+      <div class="flex-b" style="font-size:.72rem;font-family:var(--mono);">
+        <span style="color:var(--text-3);">RAM</span><span style="color:var(--text-2);">{{ limits.ram }}GB</span>
+      </div>
+      <div class="flex-b" style="font-size:.72rem;font-family:var(--mono);">
+        <span style="color:var(--text-3);">DISK</span><span style="color:var(--text-2);">{{ limits.disk }}GB</span>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if nat_info %}
+  <div class="card card-sm">
+    <div class="card-title">Your ports</div>
+    <div style="font-size:.72rem;font-family:var(--mono);margin-bottom:.5rem;">
+      <span style="color:var(--text-3);">SSH</span>
+      <span style="color:var(--accent);margin-left:.5rem;">{{ nat_info.ssh_port }}</span>
+    </div>
+    <div style="font-size:.68rem;color:var(--text-3);margin-bottom:.35rem;">Extra (open to internet):</div>
+    <div class="port-grid">
+      {% for p in nat_info.extra_ports.split(',') if p.strip() %}
+      <div class="port-pill">{{ p.strip() }}</div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if feedback_rows %}
+  <div class="card card-sm">
+    <div class="card-title">Reviews</div>
+    {% for fb in feedback_rows[:4] %}
+    <div class="review-item">
+      <div class="flex-b">
+        <span class="review-user">{{ fb.username }}</span>
+        <span style="color:var(--warn);font-size:.7rem;">{{ '★' * fb.stars }}<span style="color:var(--text-3);">{{ '★' * (5-fb.stars) }}</span></span>
+      </div>
+      {% if fb.comment %}<div class="review-text">{{ fb.comment[:70] }}</div>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</aside>
+
+<!-- Main -->
+<main class="main">
+
+{% if not vps %}
+<div class="card" style="text-align:center;padding:3rem 2rem;">
+  <div style="width:42px;height:42px;border:1px solid var(--border);border-radius:var(--r-lg);margin:0 auto 1.1rem;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:.85rem;color:var(--text-3);font-weight:600;">&gt;_</div>
+  <h2 style="font-size:1rem;font-weight:600;margin-bottom:.42rem;">No server yet</h2>
+  <p style="color:var(--text-2);font-size:.8rem;margin-bottom:1.5rem;max-width:320px;margin-left:auto;margin-right:auto;">
+    Ubuntu 22.04, root access, shared IP with your own dedicated ports. Ready in about 2 minutes.
+  </p>
+  <form method="post" action="{{ url_for('vps_create') }}">
+    <button class="btn btn-primary">+ Create VPS</button>
+  </form>
+</div>
+
+{% elif vps.status in ('queued','creating') %}
+<div class="queue-card" id="buildCard">
+  <div class="queue-ring"></div>
+  <div style="font-size:.68rem;font-family:var(--mono);color:var(--blue);margin-bottom:.42rem;">
+    {% if queue_pos > 0 %}position {{ queue_pos }} &mdash; ~{{ queue_pos * slot_seconds }}s{% else %}building now{% endif %}
+  </div>
+  <h2 style="font-size:.95rem;font-weight:600;margin-bottom:.35rem;">Provisioning Ubuntu 22.04</h2>
+  <p style="color:var(--text-2);font-size:.76rem;margin-bottom:1.1rem;">Installing system, configuring network ports, setting up terminal access.</p>
+  <div class="progress" style="max-width:260px;margin:0 auto .85rem;"><div class="progress-bar" id="buildProg" style="width:4%;transition:width .5s ease;"></div></div>
+  <div id="logBox" style="text-align:left;max-height:150px;overflow-y:auto;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--r);padding:.55rem .7rem;font-family:var(--mono);font-size:.68rem;color:var(--text-3);margin-top:.65rem;"></div>
+</div>
+<script>
+(function(){
+  const log=document.getElementById('logBox'),bar=document.getElementById('buildProg');
+  let p=4;
+  const es=new EventSource("{{ url_for('vps_logs', vps_id=vps.id) }}");
+  es.onmessage=e=>{
+    if(e.data==='[DONE]'){es.close();poll();return;}
+    const d=document.createElement('div');d.textContent=e.data;log.appendChild(d);log.scrollTop=9999;
+    p=Math.min(p+2,88);bar.style.width=p+'%';
+  };
+  function poll(){fetch("{{ url_for('vps_queue_status', vps_id=vps.id) }}").then(r=>r.json()).then(d=>{
+    if(d.status==='running'){bar.style.width='100%';setTimeout(()=>location.reload(),500);}
+    else if(d.status==='failed')location.reload();
+    else setTimeout(poll,4000);
+  });}
+  setInterval(poll,10000);
+})();
+</script>
+
+{% elif vps.status == 'failed' %}
+<div class="card">
+  <div class="alert alert-error">Build failed: {{ vps.ssh_command }}</div>
+  <form method="post" action="{{ url_for('vps_dismiss', vps_id=vps.id) }}">
+    <button class="btn btn-ghost btn-sm">Dismiss</button>
+  </form>
+</div>
+
+{% else %}
+
+<!-- Stats -->
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-label cpu">CPU</div>
+    <div class="stat-val" id="cpuVal">—</div>
+    <div class="progress"><div class="progress-bar" id="cpuBar" style="width:0%"></div></div>
+    <div class="stat-sub">usage</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label mem">RAM</div>
+    <div class="stat-val" id="ramVal">—</div>
+    <div class="progress"><div class="progress-bar" id="ramBar" style="width:0%"></div></div>
+    <div class="stat-sub" id="ramSub">memory</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label disk">DISK</div>
+    <div class="stat-val">{{ limits.disk }}<span style="font-size:.75rem;color:var(--text-3);">GB</span></div>
+    <div class="progress"><div class="progress-bar" style="width:8%"></div></div>
+    <div class="stat-sub">quota</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label uptime">UPTIME</div>
+    <div class="stat-val" id="uptimeVal">—</div>
+    <div class="progress"><div class="progress-bar" style="width:0%"></div></div>
+    <div class="stat-sub">running</div>
+  </div>
+</div>
+
+<!-- SSH + Port info -->
+{% if nat_info %}
+<div class="ssh-box">
+  <div class="ssh-box-title">&#9632; SSH Access — Shared IP</div>
+  {% set ssh_str = nat_info.ssh_port %}
+  <div style="margin-bottom:.5rem;font-size:.72rem;color:var(--text-2);">Connect with:</div>
+  <div class="ssh-cmd" id="sshCmdBox">ssh root@{{ public_ip }} -p {{ nat_info.ssh_port }}</div>
+  <div style="display:flex;gap:.5rem;margin-bottom:.85rem;flex-wrap:wrap;">
+    <button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText('ssh root@{{ public_ip }} -p {{ nat_info.ssh_port }}')">Copy SSH</button>
+    <span style="font-size:.72rem;color:var(--text-3);align-self:center;font-family:var(--mono);">root password set on creation — use terminal to change it</span>
+  </div>
+  <div style="font-size:.68rem;color:var(--text-3);font-family:var(--mono);margin-bottom:.4rem;">
+    Your extra ports (forwarded from {{ public_ip }} to your container):
+  </div>
+  <div class="port-grid">
+    {% for p in nat_info.extra_ports.split(',') if p.strip() %}
+    <div class="port-pill" title="Listen on port {{ p.strip() }} in your container">{{ p.strip() }}</div>
+    {% endfor %}
+  </div>
+  <div style="font-size:.66rem;color:var(--text-3);margin-top:.5rem;">
+    To use an extra port: start your service listening on that port inside the container. It's already open on the host.
+  </div>
+</div>
+{% endif %}
+
+<!-- VPS card -->
+<div class="card">
+  <div class="flex-b" style="margin-bottom:.9rem;flex-wrap:wrap;gap:.55rem;">
+    <div class="flex-c gap-md" style="flex-wrap:wrap;">
+      <div class="flex-c gap-sm">
+        <span class="dot {{ 'dot-green' if vps.status=='running' else 'dot-grey' if vps.status=='stopped' else 'dot-yellow' }}"></span>
+        <span style="font-family:var(--mono);font-size:.8rem;color:var(--text);">{{ vps.container_id }}</span>
+      </div>
+      <span class="badge {{ 'badge-green' if vps.status=='running' else 'badge-grey' if vps.status=='stopped' else 'badge-yellow' }}">{{ vps.status }}</span>
+      {% if vps.kvm_enabled %}<span class="badge badge-purple">KVM</span>{% endif %}
+      {% if vps.node_id and vps.node_id > 0 %}<span class="badge badge-blue">node-{{ vps.node_id }}</span>{% endif %}
+    </div>
+    <div class="action-row">
+      {% if vps.status == 'running' %}
+      <form method="post" action="{{ url_for('vps_power', vps_id=vps.id, action='stop') }}">
+        <button class="btn btn-ghost btn-sm">&#9632; Stop</button>
+      </form>
+      {% elif vps.status == 'stopped' %}
+      <form method="post" action="{{ url_for('vps_power', vps_id=vps.id, action='start') }}">
+        <button class="btn btn-primary btn-sm">&#9654; Start</button>
+      </form>
+      {% endif %}
+      <form method="post" action="{{ url_for('vps_power', vps_id=vps.id, action='reinstall') }}"
+            onsubmit="return confirm('Reinstall wipes all data. Continue?')">
+        <button class="btn btn-warn btn-sm">&#8635; Reinstall</button>
+      </form>
+      <a href="{{ url_for('file_manager', vps_id=vps.id) }}" class="btn btn-ghost btn-sm">&#128193; Files</a>
+    </div>
+  </div>
+
+  <div class="info-grid" style="margin-bottom:.85rem;">
+    <div class="info-item">
+      <span class="info-label">Container</span>
+      <span class="info-val">{{ vps.container_id }}</span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">OS</span>
+      <span class="info-val">Ubuntu 22.04 LTS</span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Node</span>
+      <span class="info-val">{{ 'node-' ~ vps.node_id if vps.node_id else 'node-1' }}</span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Created</span>
+      <span class="info-val">{{ vps.created_at | strftime }}</span>
+    </div>
+  </div>
+
+  {% if vps.status == 'running' %}
+  <hr class="divider" style="margin:.7rem 0;">
+  <!-- Tab bar -->
+  <div class="tabs">
+    <div class="tab active" id="tab-btn-browser" onclick="switchTab('browser')">&gt;_ Terminal</div>
+    {% set ssh_str, sshx_url = vps.ssh_command | parse_ssh_command %}
+    {% if sshx_url and sshx_url != '__terminal_only__' %}
+    <div class="tab" id="tab-btn-sshx" onclick="switchTab('sshx')">&#8617; sshx</div>
+    {% endif %}
+    <div style="margin-left:auto;display:flex;align-items:center;padding:.2rem 0;">
+      <form method="post" action="{{ url_for('regen_ssh', vps_id=vps.id) }}" style="margin:0;">
+        <button class="btn btn-ghost btn-sm">&#8635; Regen</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Browser terminal -->
+  <div id="tab-browser" class="terminal-wrap">
+    <div class="terminal-titlebar">
+      <span class="tbar-dot" style="background:#ff5f57;"></span>
+      <span class="tbar-dot" style="background:#febc2e;margin-left:4px;"></span>
+      <span class="tbar-dot" style="background:#28c840;margin-left:4px;"></span>
+      <span class="tbar-title">{{ vps.container_id[:24] }}</span>
+    </div>
+    <div id="terminal-output"></div>
+    <div id="terminal-input-row">
+      <span class="t-prompt">~#</span>
+      <input id="terminal-cmd" type="text" autocomplete="off" spellcheck="false" placeholder="command">
+    </div>
+  </div>
+
+  <!-- sshx tab -->
+  {% set ssh_str2, sshx_url2 = vps.ssh_command | parse_ssh_command %}
+  {% if sshx_url2 and sshx_url2 != '__terminal_only__' %}
+  <div id="tab-sshx" style="display:none;padding:.85rem 0;">
+    <p style="font-size:.76rem;color:var(--text-2);margin-bottom:.65rem;">Full-featured browser terminal — colour output, session sharing, mobile.</p>
+    <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
+      <code style="flex:1;padding:.5rem .65rem;font-size:.72rem;word-break:break-all;display:block;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--r);">{{ sshx_url2 }}</code>
+      <a href="{{ sshx_url2 }}" target="_blank" rel="noopener" class="btn btn-primary btn-sm">Open</a>
+      <button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText('{{ sshx_url2 }}')">Copy</button>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if not sshx_url2 or sshx_url2 == '__terminal_only__' %}
+  <div style="padding:.6rem 0;">
+    <div class="alert alert-info" style="font-size:.75rem;">
+      sshx not established — browser terminal above has full access. Click <strong>Regen</strong> to retry.
+    </div>
+  </div>
+  {% endif %}
+  {% endif %}
+</div>
+
+{% if can_feedback %}
+<div class="card card-sm">
+  <div class="card-title">Leave a review</div>
+  <form method="post" action="{{ url_for('submit_feedback') }}">
+    <input type="hidden" name="stars" id="starInput" value="0">
+    <div style="display:flex;align-items:center;gap:.85rem;flex-wrap:wrap;">
+      <div id="starRow" style="display:flex;gap:.1rem;">
+        {% for i in range(1,6) %}
+        <button type="button" class="star-btn" data-v="{{ i }}" onclick="setStar({{ i }})">&#9733;</button>
+        {% endfor %}
+      </div>
+      <input name="comment" class="form-input" placeholder="Optional comment" style="flex:1;min-width:150px;">
+      <button type="submit" class="btn btn-primary btn-sm">Post</button>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+{% endif %}
+</main>
+</div>
+</div>
+
+<script>
+function switchTab(name){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  const btn=document.getElementById('tab-btn-'+name); if(btn) btn.classList.add('active');
+  const b=document.getElementById('tab-browser'), s=document.getElementById('tab-sshx');
+  if(b) b.style.display=name==='browser'?'':'none';
+  if(s) s.style.display=name==='sshx'?'':'none';
+}
+function setStar(v){
+  document.getElementById('starInput').value=v;
+  document.querySelectorAll('.star-btn').forEach(s=>s.classList.toggle('lit',parseInt(s.dataset.v)<=v));
+}
+{% if vps and vps.status == 'running' %}
+(function(){
+  const out=document.getElementById('terminal-output'),inp=document.getElementById('terminal-cmd');
+  if(!out||!inp) return;
+  const hist=[]; let hi=-1;
+  function line(txt,cls){const s=document.createElement('span');s.className='t-line '+(cls||'t-out');s.textContent=txt+'\n';out.appendChild(s);out.scrollTop=out.scrollHeight;}
+  line('connected to {{ vps.container_id }}','t-info');
+  inp.addEventListener('keydown',async e=>{
+    if(e.key==='ArrowUp'){e.preventDefault();if(hi<hist.length-1){hi++;inp.value=hist[hist.length-1-hi];}return;}
+    if(e.key==='ArrowDown'){e.preventDefault();if(hi>0){hi--;inp.value=hist[hist.length-1-hi];}else{hi=-1;inp.value='';}return;}
+    if(e.key!=='Enter') return;
+    const cmd=inp.value.trim(); if(!cmd) return;
+    hist.push(cmd); hi=-1; line('# '+cmd,'t-cmd'); inp.value='';
+    try{
+      const r=await fetch("{{ url_for('terminal_exec', vps_id=vps.id) }}",{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cmd})});
+      const d=await r.json();
+      if(d.error){line('error: '+d.error,'t-err');return;}
+      (d.output||'').split('\n').forEach(l=>line(l,'t-out'));
+      if(d.exit_code!==0) line('[exit '+d.exit_code+']','t-err');
+    }catch(err){line('failed: '+err,'t-err');}
+  });
+  inp.focus();
+})();
+(function(){
+  const cpuV=document.getElementById('cpuVal'),cpuB=document.getElementById('cpuBar');
+  const ramV=document.getElementById('ramVal'),ramB=document.getElementById('ramBar');
+  const ramS=document.getElementById('ramSub'),upV=document.getElementById('uptimeVal');
+  if(!cpuV) return;
+  function fmt(s){if(!s)return'—';const h=Math.floor(s/3600),m=Math.floor((s%3600)/60);return h>=24?Math.floor(h/24)+'d '+h%24+'h':h+'h '+m+'m';}
+  function bar(el,pct){el.style.width=Math.min(pct,100)+'%';el.className='progress-bar'+(pct>85?' danger':pct>65?' warn':'');}
+  function poll(){
+    fetch("{{ url_for('vps_stats', vps_id=vps.id) }}").then(r=>r.json()).then(d=>{
+      if(d.error)return;
+      cpuV.textContent=d.cpu_percent.toFixed(1)+'%'; bar(cpuB,d.cpu_percent);
+      ramV.textContent=d.mem_usage_mb+'MB'; bar(ramB,d.mem_percent);
+      if(ramS)ramS.textContent='of '+(d.mem_limit_mb/1024).toFixed(1)+'GB';
+      if(upV)upV.textContent=fmt(d.uptime_seconds);
+    }).catch(()=>{});
+  }
+  poll(); setInterval(poll,5000);
+})();
+{% endif %}
+</script>
+{% endblock %}
