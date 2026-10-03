@@ -24,6 +24,7 @@ from vps import (
     delete_file, create_directory, exec_command,
     get_free_vps_cpu, get_free_vps_ram, get_free_vps_disk,
     kvm_available, set_kvm_enabled,
+    get_root_password, reset_root_password,
 )
 from monitor import start_monitor
 import queue_manager as queue
@@ -342,7 +343,12 @@ def dashboard():
     }
     can_feedback = bool(vps and vps["status"] == "running" and vps["ssh_command"])
 
+    root_password = None
+    if vps and vps["status"] == "running" and vps["container_id"] not in ("pending", "pending-overflow", "overflow-failed"):
+        root_password = get_root_password(vps["container_id"])
+
     return render_template("dashboard.html",
+        root_password=root_password,
         vps=vps, all_vps=all_vps,
         nat_info=nat_info,
         feedback_rows=feedback_rows,
@@ -621,11 +627,10 @@ def vps_power(vps_id, action):
         start_vps(vps["container_id"])
         db.execute("UPDATE vps SET status='running' WHERE id=?", (vps_id,)); db.commit()
         # Reapply NAT rules (container IP may have changed)
-        nat_row = nat.get_nat_rule(db, vps_id)
-        if nat_row:
-            extra = [int(p) for p in nat_row["extra_ports"].split(",") if p.strip().isdigit()]
-            nat.add_nat_rules(vps["container_id"], nat_row["container_ip"],
-                              nat_row["ssh_port"], extra)
+        try:
+            nat.refresh_nat_rules(db, vps_id, wait_tries=10)
+        except Exception as e:
+            print(f"[NAT] refresh on start failed: {e}")
         flash("VPS started")
     elif action == "stop":
         stop_vps(vps["container_id"])
@@ -764,6 +769,23 @@ def file_mkdir(vps_id):
 
 # ── Feedback ──────────────────────────────────────────────────────────────────
 
+@app.route("/vps/<int:vps_id>/reset_password", methods=["POST"])
+@login_required
+def vps_reset_password(vps_id):
+    vps = _owned_vps(vps_id)
+    if not vps:
+        abort(404)
+    if vps["status"] != "running":
+        flash("VPS must be running")
+        return redirect(url_for("dashboard", vps_id=vps_id))
+    try:
+        reset_root_password(vps["container_id"])
+        flash("Root password reset")
+    except Exception as e:
+        flash(f"Failed: {e}")
+    return redirect(url_for("dashboard", vps_id=vps_id))
+
+
 @app.route("/feedback", methods=["POST"])
 @login_required
 def submit_feedback():
@@ -883,11 +905,10 @@ def admin_vps_action(vps_id, action):
         unsuspend_vps(vps["container_id"])
         db.execute("UPDATE vps SET status='running' WHERE id=?", (vps_id,))
         # Reapply NAT
-        nat_row = nat.get_nat_rule(db, vps_id)
-        if nat_row:
-            extra = [int(p) for p in nat_row["extra_ports"].split(",") if p.strip().isdigit()]
-            nat.add_nat_rules(vps["container_id"], nat_row["container_ip"],
-                              nat_row["ssh_port"], extra)
+        try:
+            nat.refresh_nat_rules(db, vps_id, wait_tries=10)
+        except Exception as e:
+            print(f"[NAT] refresh on unsuspend failed: {e}")
     elif action == "delete":
         try: nat.deprovision_nat(db, vps_id)
         except: pass
@@ -997,12 +1018,6 @@ def vps_stats_summary():
     db  = get_db()
     cnt = db.execute("SELECT COUNT(*) FROM vps WHERE status NOT IN ('failed','deleted')").fetchone()[0]
     return jsonify({"vps_count":cnt,"max":MAX_VPS_PER_NODE})
-
-@app.route("/vps/<int:vps_id>")
-@login_required
-def vps_view(vps_id):
-    return redirect(url_for("dashboard", vps_id=vps_id))
-
 
 # ── Boot ──────────────────────────────────────────────────────────────────────
 
