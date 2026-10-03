@@ -208,6 +208,64 @@ def generate_password(length: int = 16) -> str:
     return "".join(secrets.choice(alphabet) for _ in range(length))
 
 
+# ── password SSH ────────────────────────────────────────────────────────────
+
+def _enable_password_ssh(inst):
+    """Turns on password login for root and turns off pubkey-only auth."""
+    env = {"HOME": "/root", "DEBIAN_FRONTEND": "noninteractive"}
+    script = r"""
+if [ ! -x /usr/sbin/sshd ]; then
+  apt-get update -qq && apt-get install -y -qq openssh-server
+fi
+mkdir -p /run/sshd /etc/ssh/sshd_config.d
+printf '%s\n' 'PasswordAuthentication yes' 'KbdInteractiveAuthentication yes' 'PermitRootLogin yes' 'PubkeyAuthentication no' 'UsePAM yes' > /etc/ssh/sshd_config.d/00-panel.conf
+sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+systemctl enable ssh >/dev/null 2>&1
+systemctl restart ssh 2>/dev/null || service ssh restart 2>/dev/null || { pkill sshd; /usr/sbin/sshd; }
+true
+"""
+    try:
+        _exec(inst, ["bash", "-c", script], environment=env)
+    except Exception as e:
+        print(f"[ssh-pass] {e}")
+
+
+def _store_password(inst, password: str):
+    """Saves the root password in the container's LXD config."""
+    try:
+        inst.config["user.root_password"] = password
+        inst.save(wait=True)
+    except Exception as e:
+        print(f"[ssh-pass] could not store password: {e}")
+
+
+def get_root_password(container_id: str):
+    """Returns the stored root password, or None if unknown."""
+    inst = _get_container(container_id)
+    if not inst:
+        return None
+    try:
+        inst.sync()
+        return inst.config.get("user.root_password")
+    except Exception:
+        return None
+
+
+def reset_root_password(container_id: str) -> str:
+    """Generates a new root password, applies it, enables password SSH, stores it."""
+    inst = _get_container(container_id)
+    if not inst:
+        raise RuntimeError("Container not found")
+    pw = generate_password()
+    r = _exec(inst, ["bash", "-c", f"echo root:{pw} | chpasswd"])
+    if r.exit_code != 0:
+        raise RuntimeError("chpasswd failed")
+    _enable_password_ssh(inst)
+    _store_password(inst, pw)
+    return pw
+
+
 # ── container lifecycle ─────────────────────────────────────────────────────
 
 def _create_raw(username: str, cpu: int, ram_mb: int, disk_gb: int, image: str = IMAGE_ALIAS) -> dict:
@@ -243,6 +301,8 @@ def _create_raw(username: str, cpu: int, ram_mb: int, disk_gb: int, image: str =
         if not _wait_running(inst):
             raise RuntimeError("Container did not reach running state in time")
         _set_root_password_with_retry(inst, password)
+        _enable_password_ssh(inst)
+        _store_password(inst, password)
         return {"container_id": container_name, "password": password, "status": "running"}
     except LXDAPIException as e:
         return {"error": str(e)}
